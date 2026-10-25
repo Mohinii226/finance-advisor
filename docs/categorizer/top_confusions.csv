@@ -1,0 +1,11 @@
+true,pred,count
+Groceries,Food Delivery,621
+Food Delivery,Groceries,343
+Groceries,Shopping,340
+Shopping,Groceries,267
+Dining Out,Transfers,257
+Groceries,Transfers,226
+Gifts & Donations,Transfers,150
+Fuel,Groceries,131
+Groceries,Utilities,126
+Transfers,Dining Out,119

@@ -1,0 +1,111 @@
+# Production stack: Postgres (not exposed), API, Streamlit app, Caddy (HTTPS). Everything is reached through Caddy on 80/443.
+#   alias dc='docker compose -f docker-compose.prod.yml --env-file .env.production'
+#   dc up -d db ; dc run --rm jobs python deploy/bootstrap.py ; (apply sql/rls.sql) ; dc up -d --build api app caddy
+# See docs/DEPLOY.md.
+
+x-shared-env: &shared-env
+  APP_ENV: production
+  RLS: "on"                       # row-level security (sql/rls.sql); startup refuses to run if the role could bypass it
+  APP_BASE_URL: https://${APP_DOMAIN:?set APP_DOMAIN in .env.production}
+  ALLOW_SIGNUP: ${ALLOW_SIGNUP:-true}
+  DEMO_CUSTOMER_ID: ${DEMO_CUSTOMER_ID:-}
+  REQUIRE_EMAIL_VERIFICATION: ${REQUIRE_EMAIL_VERIFICATION:-true}
+  SESSION_DAYS: ${SESSION_DAYS:-7}
+  MAIL_BACKEND: ${MAIL_BACKEND:-smtp}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ADVISOR_MODEL: ${ADVISOR_MODEL:-}
+
+services:
+  db:
+    image: postgres:16
+    container_name: finance_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: finance_advisor
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro    # runs only when the volume is first created
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance_advisor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks: [internal]                                                  # no published ports: only the containers can reach it
+
+  api:
+    build: .
+    container_name: finance_api
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      <<: *shared-env
+      DATABASE_URL: ${APP_DATABASE_URL:?set APP_DATABASE_URL in .env.production (the finsight_app role, see docs/DEPLOY.md)}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env.production}
+      JWT_TTL_MINUTES: ${JWT_TTL_MINUTES:-60}
+      CHAT_PER_HOUR: ${CHAT_PER_HOUR:-60}
+      CHAT_PER_HOUR_DEMO: ${CHAT_PER_HOUR_DEMO:-20}
+    networks: [internal, web]
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: finance_app
+    restart: unless-stopped
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      <<: *shared-env
+      DATABASE_URL: ${APP_DATABASE_URL:?set APP_DATABASE_URL in .env.production (the finsight_app role, see docs/DEPLOY.md)}
+      COOKIE_SECURE: "true"
+    networks: [internal, web]
+
+  caddy:
+    image: caddy:2
+    container_name: finance_caddy
+    restart: unless-stopped
+    depends_on: [app, api]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN:-api.invalid}
+      ACME_EMAIL: ${ACME_EMAIL}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data                                                  # certificates: keep this volume
+      - caddy_config:/config
+    networks: [web]
+
+  jobs:                                                                   # not started by `up`; used with `dc run --rm jobs ...`
+    build:
+      context: .
+      dockerfile: Dockerfile.jobs
+    profiles: ["jobs"]
+    depends_on:
+      db: {condition: service_healthy}
+    environment:
+      DATABASE_URL: postgresql+psycopg2://finance:${POSTGRES_PASSWORD}@db:5432/finance_advisor
+    volumes:
+      - ./models:/app/models:ro                                           # trained categoriser (optional)
+    networks: [internal]
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  internal:
+  web:

@@ -1,0 +1,86 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "API (uvicorn, reload)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": [
+        "api.main:app",
+        "--reload",
+        "--port",
+        "8000"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env",
+      "justMyCode": true
+    },
+    {
+      "name": "Streamlit app",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "app/streamlit_app.py"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Generate data (300 customers)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "data_gen.generate",
+      "args": [
+        "--customers",
+        "300",
+        "--months",
+        "36",
+        "--seed",
+        "42"
+      ],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Load data into PostgreSQL",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "data_gen.load_to_postgres",
+      "args": [
+        "--reset"
+      ],
+      "cwd": "${workspaceFolder}",
+      "envFile": "${workspaceFolder}/.env"
+    },
+    {
+      "name": "Forecast backtest (all installed models)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "ml.forecasting.compare",
+      "args": [
+        "--data-dir",
+        "data/raw",
+        "--max-series",
+        "30",
+        "--origins",
+        "6"
+      ],
+      "cwd": "${workspaceFolder}"
+    },
+    {
+      "name": "Current test file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": [
+        "${file}",
+        "-x",
+        "-q"
+      ],
+      "cwd": "${workspaceFolder}",
+      "justMyCode": false
+    }
+  ]
+}

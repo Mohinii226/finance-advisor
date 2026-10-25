@@ -1,0 +1,79 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "1. Start PostgreSQL (docker)",
+      "type": "shell",
+      "command": "docker compose up -d db",
+      "problemMatcher": []
+    },
+    {
+      "label": "2. Generate data",
+      "type": "shell",
+      "command": "python -m data_gen.generate --customers 300 --months 36 --seed 42",
+      "problemMatcher": []
+    },
+    {
+      "label": "3. Load data + create views",
+      "type": "shell",
+      "command": "python -m data_gen.load_to_postgres --reset",
+      "problemMatcher": []
+    },
+    {
+      "label": "4. Overspend alerts",
+      "type": "shell",
+      "command": "python -m ml.anomaly.run_detector --preset balanced",
+      "problemMatcher": []
+    },
+    {
+      "label": "5. Health scores",
+      "type": "shell",
+      "command": "python -m core.health_score",
+      "problemMatcher": []
+    },
+    {
+      "label": "6. Spending forecasts",
+      "type": "shell",
+      "command": "python -m ml.forecasting.run_forecast --source db",
+      "problemMatcher": []
+    },
+    {
+      "label": "7. Train categoriser (slow, ~10 min)",
+      "type": "shell",
+      "command": "python -m ml.categorizer.train --data-dir data/raw --out models/categorizer",
+      "problemMatcher": []
+    },
+    {
+      "label": "8. Categorise blank-label transactions",
+      "type": "shell",
+      "command": "python -m ml.categorizer.predict --dir models/categorizer",
+      "problemMatcher": []
+    },
+    {
+      "label": "9. Run Streamlit app",
+      "type": "shell",
+      "command": "streamlit run app/streamlit_app.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run all tests",
+      "type": "shell",
+      "command": "python -m pytest",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Setup database end to end (1-6)",
+      "dependsOrder": "sequence",
+      "dependsOn": [
+        "1. Start PostgreSQL (docker)",
+        "2. Generate data",
+        "3. Load data + create views",
+        "4. Overspend alerts",
+        "5. Health scores",
+        "6. Spending forecasts"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+# Minimal runtime for the API container (no training / forecasting libraries)
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+PyJWT>=2.7
+# anthropic>=0.40   # uncomment to enable the real LLM for /chat

@@ -1,0 +1,49 @@
+services:
+  db:
+    image: postgres:16
+    container_name: finance_db
+    environment:
+      POSTGRES_USER: finance
+      POSTGRES_PASSWORD: finance
+      POSTGRES_DB: finance_advisor
+    ports:
+      - "5432:5432"        # change the left side (e.g. "5433:5432") if you already run PostgreSQL locally
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./sql/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finance -d finance_advisor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    container_name: finance_api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://finance:finance@db:5432/finance_advisor
+      ADVISOR_API_KEY: ${ADVISOR_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8000:8000"
+    profiles: ["api"]          # start with: docker compose --profile api up -d --build
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamlit
+    container_name: finance_app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://finance:finance@db:5432/finance_advisor
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    ports:
+      - "8501:8501"
+    profiles: ["app"]          # start with: docker compose --profile app up -d --build
+volumes:
+  pgdata:

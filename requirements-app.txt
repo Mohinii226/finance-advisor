@@ -1,0 +1,9 @@
+# Minimal runtime for the Streamlit container
+numpy>=1.26
+pandas>=2.1
+scipy>=1.11
+sqlalchemy>=2.0
+psycopg2-binary>=2.9
+streamlit>=1.37
+plotly>=5.18
+# anthropic>=0.40   # uncomment to enable the real LLM in the chat tab

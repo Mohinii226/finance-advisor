@@ -1,0 +1,88 @@
+{
+  "config": {
+    "stage2": "hgb",
+    "train_end": "2024-10-01",
+    "val_end": "2025-01-01",
+    "target_accuracy": 0.98
+  },
+  "baseline_majority_class": {
+    "n": 120694,
+    "accuracy": 0.19625664904634862,
+    "macro_f1": 0.014914452984559162,
+    "weighted_f1": 0.06439533243239566
+  },
+  "baseline_text_only": {
+    "n": 120694,
+    "accuracy": 0.9303030805176727,
+    "macro_f1": 0.9480391551493697,
+    "weighted_f1": 0.9303719919493598
+  },
+  "full_model": {
+    "n": 120694,
+    "accuracy": 0.9555735993504234,
+    "macro_f1": 0.9642903243298168,
+    "weighted_f1": 0.9555489044472536
+  },
+  "full_model_seen_customers": {
+    "n": 96884,
+    "accuracy": 0.9572684860245242,
+    "macro_f1": 0.9665069795812417,
+    "weighted_f1": 0.957239243228576
+  },
+  "full_model_unseen_customers": {
+    "n": 23810,
+    "accuracy": 0.9486770264594708,
+    "macro_f1": 0.9554392107149734,
+    "weighted_f1": 0.9486508497733591
+  },
+  "full_model_blank_label_rows": {
+    "n": 9489,
+    "accuracy": 0.9567920750342502,
+    "macro_f1": 0.9614045458472419,
+    "weighted_f1": 0.9567353097371594
+  },
+  "review_queue": {
+    "target_0.97": {
+      "threshold": 0.3910890085080909,
+      "coverage": 0.9813329577278075,
+      "review_rate": 0.018667042272192513,
+      "accuracy_accepted": 0.9682964513977423,
+      "accuracy_review_queue": 0.2867288060363959
+    },
+    "target_0.98": {
+      "threshold": 0.5670808243348157,
+      "coverage": 0.9581752199777951,
+      "review_rate": 0.04182478002220491,
+      "accuracy_accepted": 0.9799128374522249,
+      "accuracy_review_queue": 0.39797939778129954
+    },
+    "target_0.99": {
+      "threshold": 0.7525396546150419,
+      "coverage": 0.9267403516330555,
+      "review_rate": 0.07325964836694454,
+      "accuracy_accepted": 0.9900404105425026,
+      "accuracy_review_queue": 0.5195657091155848
+    }
+  },
+  "review_queue_primary_target": 0.98,
+  "ablation": {
+    "stage 2 on text probabilities only": {
+      "n": 120694,
+      "accuracy": 0.9306179263260809,
+      "macro_f1": 0.9465340186938519,
+      "weighted_f1": 0.9305884637449053
+    },
+    "+ amount / channel / time features": {
+      "n": 120694,
+      "accuracy": 0.9435183190547998,
+      "macro_f1": 0.9560632996141005,
+      "weighted_f1": 0.9437213051062253
+    },
+    "+ payee history (full model)": {
+      "n": 120694,
+      "accuracy": 0.9555735993504234,
+      "macro_f1": 0.9642903243298168,
+      "weighted_f1": 0.9555489044472536
+    }
+  }
+}
