@@ -3,8 +3,10 @@
 An AI + analytics personal-finance assistant on a **synthetic Indian transaction dataset** (realistic merchants, UPI/card descriptions, festivals,
 EMIs, injected ground-truth events), so every model is evaluated against known truth.
 
-> **Update (Phase 9):** the app and API now require a login. Before the quickstart below, add `JWT_SECRET` (and the other login settings from
-> `.env.example`) to your `.env`, and apply `sql/migrations/002_auth_extras.sql` to an existing database. See *Phase 9* at the end of this file.
+> **Login:** the app and API require a login. Set `JWT_SECRET` in `.env` before starting (generate one with
+> `python -c "import secrets; print(secrets.token_urlsafe(48))"`). Set `DEMO_CUSTOMER_ID=C0001` for a one-click demo account, and use
+> `MAIL_BACKEND=console` in development so verification and reset links are printed in the terminal. An existing database needs
+> `sql/migrations/002_auth_extras.sql`. Details are in *Phase 9* at the end of this file.
 
 ## Quickstart (Ubuntu + Docker + VS Code)
 
@@ -12,7 +14,7 @@ EMIs, injected ground-truth events), so every model is evaluated against known t
 cd finance-advisor
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
+cp .env.example .env                                           # then set JWT_SECRET in .env (see Phase 9)
 
 docker compose up -d db                                        # PostgreSQL 16 with the schema
 python -m data_gen.generate --customers 300 --months 36 --seed 42    # ~80 s, writes data/raw/*.csv
@@ -21,9 +23,12 @@ python -m ml.anomaly.run_detector --preset balanced            # overspending al
 python -m core.health_score                                    # health scores        -> health_scores table
 python -m ml.forecasting.run_forecast --source db              # next-month forecasts -> forecasts table
 uvicorn api.main:app --reload                                  # REST API + docs at http://localhost:8000/docs
-streamlit run app/streamlit_app.py                             # dashboard + chat at http://localhost:8501
+streamlit run app/streamlit_app.py                             # dashboard + chat at http://localhost:8501 (log in, or use the demo account)
 python -m pytest                                               # full test-suite (several minutes: builds simulated datasets)
 ```
+
+On **Windows (PowerShell)** create the environment with `python -m venv .venv; .\.venv\Scripts\Activate.ps1` and copy the env file with
+`Copy-Item .env.example .env`; the remaining commands are unchanged. Docker Desktop must be running.
 
 Optional extras
 ```bash
@@ -39,22 +44,29 @@ In VS Code: *Terminal > Run Task...* has every step above (task **"Setup databas
 launch configs for the API, the data loader, the forecast comparison and the current test file. Copy `.env.example` to `.env` first.
 Chat works without any key (offline demo mode); set `ANTHROPIC_API_KEY` in `.env` to use a real model.
 
-## What was verified, and what was not (read this before your first run)
+## Status: what is verified and what is not
 
-I built and tested this in a sandbox with **no PostgreSQL, Docker, FastAPI, statsmodels, Prophet, PyTorch or network access**. So:
+**Run and tested** on Windows with Docker Desktop (Python 3.14, PostgreSQL 16, Streamlit 1.58, FastAPI 0.159, Plotly 6.7, pandas 3.0, SQLAlchemy 2.0, PyJWT 2.13):
 
 | Area | Status |
 |---|---|
-| Data generator, SQL view *logic*, overspend detector, categoriser, health score, savings planner, insights, chat service / tools / agent loop, forecasting baselines and gradient boosting | Run and tested (85 tests pass here; 5 more are skipped and run where FastAPI, Streamlit, statsmodels, Prophet and PyTorch are installed) |
-| SQL against **real PostgreSQL** | **Not run.** Views were exercised through SQLite plus a runner that returns PostgreSQL-style types (`Decimal`, `date`); service answers are identical under both. Real Postgres may still reject some syntax |
-| `load_to_postgres`, `run_detector`, `core.health_score`, `run_forecast --source db`, `categorizer.predict` (database paths) | **Not run** |
-| FastAPI app, `docker compose --profile api` image | **Not run** (4 tests are skipped here and run on your machine) |
-| `AnthropicClient` (real LLM), XGBoost stage-2 path | **Not run** |
-| ARIMA, Prophet, LSTM forecasters | **Written, not run** |
-| Streamlit app | Built. Run here **only against a recording fake of `streamlit` and `plotly`** (catches wiring bugs, not misuse of the real APIs). One real-Streamlit test is skipped here and runs on your machine |
-| Power BI dashboard | **Not built** |
+| Synthetic data generation, loading into PostgreSQL 16, analytics views | Run |
+| Streamlit dashboard (overview, spending, health & savings, alerts & insights, chat, statement import, model lab) against PostgreSQL | Run in a browser |
+| FastAPI app under uvicorn, plus HTTP-level tests with `TestClient` | Run (15 HTTP tests pass) |
+| Sign-up, email verification (console mail backend), login, refresh, password reset, lockout, account deletion, statement import and duplicate check | Click-tested in a real browser |
+| Auth, flows, statement import, HTTP API and isolation tests | 152 tests pass |
+| Data generator, SQL view logic (SQLite plus a runner that returns PostgreSQL-style types), overspend detector, categoriser, health score, savings planner, insights, chat service / tools / agent loop, forecasting baselines and gradient boosting | Automated tests (`python -m pytest`) |
 
-Expect a few small first-run fixes. If something fails, send me the full traceback and the command you ran.
+**Not yet verified**
+
+| Area | Status |
+|---|---|
+| Row-level security (`sql/rls.sql`) | Written; proven only when `tests/test_rls_postgres.py` is run against a real PostgreSQL with the role applied (instructions in the file) |
+| Production deployment (`docker-compose.prod.yml`, Caddy HTTPS, SMTP email, backups, nightly jobs) | Written, not yet run end to end; email has only been tried with the console backend |
+| Real LLM chat (`AnthropicClient`) | Not run. Chat uses the offline rule-based client unless `ANTHROPIC_API_KEY` is set |
+| XGBoost stage 2; ARIMA, Prophet and LSTM forecasters | Implemented, not run |
+| Power BI dashboard | Not built |
+
 Everything here is simulated data with injected patterns; none of the accuracy figures describe real-world performance.
 
 ---
@@ -205,7 +217,7 @@ Base rate of event cells: ~0.8% (a random scorer gets ~0.008 average precision).
 * **Precision is low in absolute terms (5-7%).** Event cells are <1% of all cells, and natural month-to-month noise in lumpy
   categories (Travel, Health, Gifts, Transfers) is comparable in size to the injected 1.5-3x events. In exploratory runs
   (~1,700 randomly sampled configurations across three rule families; the throwaway search scripts are not in the repo) nothing
-  broke a ceiling of roughly 5-10% precision at low alert volume, so I would not promise more on this data.
+  broke a ceiling of roughly 5-10% precision at low alert volume, so no more than that is claimed on this data.
 * **Dev -> test drop** (7.8% -> 5.8% precision) is the expected cost of choosing presets on dev.
 * **A perfect categoriser does not give a consistent gain** (`TEST, perfect categoriser` rows in `docs/overspend_results.md`), so
   label noise is not the bottleneck here; categoriser accuracy and detector quality are separate problems.
@@ -265,7 +277,7 @@ With every merchant named in its description, text alone scored 99.9%, which is 
 step now rewrites ~13% of debit descriptions (own RNG; amounts, dates and categories are untouched, verified column by column):
 payments to local shops through a **personal UPI id** (stable per customer), **parent-brand collapse** ("AMAZON" for Prime / Fresh /
 shopping, "SWIGGY" for delivery / Instamart / Swiggy One), and **generic aggregators** ("PAYTM", "PHONEPE"). Use
-`python -m data_gen.generate --no-ambiguity` for the easy version. The ambiguity rates are my choices, so absolute accuracy
+`python -m data_gen.generate --no-ambiguity` for the easy version. The ambiguity rates are design choices, so absolute accuracy
 describes this simulation, not real bank data.
 
 ## Results (2025 test set, 120,694 debit transactions; from `docs/categorizer/metrics.json`)
@@ -288,7 +300,7 @@ describes this simulation, not real bank data.
 | + payee history (full model) | 95.6% | 0.964 |
 
 **"Needs review" queue**: thresholds picked on validation, reported on test. The target must exceed the model's overall accuracy,
-otherwise almost nothing is flagged (my first version used 95% and sent <0.01% of rows to review).
+otherwise almost nothing is flagged (an earlier version used 95% and sent <0.01% of rows to review).
 
 | Target accuracy of auto-accepted rows | Achieved on test | Auto-accepted | Sent to review |
 |---|---|---|---|
@@ -339,12 +351,12 @@ Confusion matrix: `docs/categorizer/confusion_matrix.png`. Per-class results (wo
 * **Payee history helps largely because shopkeeper aliases are stable per customer in the simulation** (as on real statements, but the
   size of the gain depends on that choice).
 * History features use customers' earlier labels, including labels accrued during the test year, as in production where users label over time.
-* Development path, for transparency: I compared stage-1 solvers using test metrics, and the stage-2 collapse was diagnosed on test.
+* Development path, for transparency: stage-1 solvers were compared using test metrics, and the stage-2 collapse was diagnosed on test.
   The final stage-2 feature choices (structured + history, no class weights) were selected on the validation quarter. Treat the test
   numbers as good but not a pristine holdout.
 * A faster stage 1 trained on unique (text, label) pairs under-converged (85.9% vs 93.1%), so training uses exact row-level SGD.
-* XGBoost is supported (`--stage2 xgboost`) but **untested here** (not installed in my sandbox); the numbers above use the scikit-learn fallback.
-* `predict.py`'s Postgres write-back is untested (no database in my sandbox).
+* XGBoost is supported (`--stage2 xgboost`) but has not been benchmarked; the numbers above use the scikit-learn fallback.
+* `predict.py`'s Postgres write-back is not covered by automated tests (the test suite runs the SQL against SQLite).
 * Phase 3 results were re-run after this change and are identical (only descriptions changed).
 
 
@@ -414,14 +426,13 @@ A complete worked example is in `docs/core_results.md`.
   against real financial outcomes. The job-loss check is a handful of events.
 * **The simulated population skews high** (most customers are "Excellent") because simulated customers save generously. The peer percentile
   stays informative when raw scores bunch at the top.
-* **Planner caps and pain weights are my assumptions**, not measured behaviour. The planner is exact for its own model, which is a different claim
+* **Planner caps and pain weights are assumptions**, not measured behaviour. The planner is exact for its own model, which is a different claim
   from "these cuts are easy for real people".
-* **Insight heuristics** (e.g. a purchase is "one-off" if it is at least 60% of the increase and 2.5x the typical ticket) are fixed thresholds that I
-  did not tune. Explanations for fixed bills are inferences, hence "likely".
+* **Insight heuristics** (e.g. a purchase is "one-off" if it is at least 60% of the increase and 2.5x the typical ticket) are fixed thresholds that were
+  not tuned. Explanations for fixed bills are inferences, hence "likely".
 * In the worked example the story leads with a one-off Shopping purchase and does not mention the injected Dining Out ramp, because that
   ramp is smaller than other movers that month. That is an accurate reading of the data, not a miss, but it shows the story ranks by rupee impact.
-* Untested here (no database in my sandbox): `python -m core.health_score` (writes `health_scores`) and `insights.make_runner` against PostgreSQL.
-  The SQL itself is exercised through the SQLite harness.
+* Automated tests exercise the SQL through the SQLite harness; `insights.make_runner` and the Streamlit app also run against PostgreSQL (Docker).
 * Test status for the whole repo is summarised under Phase 6.
 
 
@@ -442,14 +453,17 @@ question -> agent loop -> LLM client -> tool call -> validator -> service -> SQL
 | `llm/rulebased.py` | **Offline demo client (not an LLM)**: routes the spec's example questions to the same tools, no API key or cost |
 | `llm/clients.py` | `AnthropicClient` adapter (model via `ADVISOR_MODEL`, default `claude-haiku-4-5-20251001`) |
 | `llm/prompts.py`, `llm/testing.py` | System prompt; scripted fake models for tests |
-| `api/handlers.py`, `api/main.py`, `api/schemas.py` | Framework-free handlers (tested) + thin FastAPI routing (not run here) |
+| `api/handlers.py`, `api/main.py`, `api/schemas.py` | Framework-free handlers (tested) + thin FastAPI routing (HTTP tests with `TestClient`) |
 
 ```bash
-uvicorn api.main:app --port 8000          # DATABASE_URL, optional ADVISOR_API_KEY, optional ANTHROPIC_API_KEY
-curl -X POST localhost:8000/chat -H 'Content-Type: application/json' \
-     -d '{"customer_id": "C0001", "message": "Why did I spend more this month?"}'
+uvicorn api.main:app --port 8000          # needs DATABASE_URL and JWT_SECRET; optional ANTHROPIC_API_KEY
+TOKEN=$(curl -s -X POST localhost:8000/auth/demo | python -c "import sys, json; print(json.load(sys.stdin)['access_token'])")   # demo login (DEMO_CUSTOMER_ID)
+curl -X POST localhost:8000/chat -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' \
+     -d '{"message": "Why did I spend more this month?"}'
 ```
-Endpoints: `GET /health`, `GET /customers/{id}/summary | categories | alerts | health-score | insights`, `POST /customers/{id}/savings-plan`, `POST /chat`.
+Endpoints: `GET /health`; `POST /auth/register | login | demo | verify-email | resend-verification | forgot-password | reset-password`; with a bearer token
+(always the caller's own data): `GET /me`, `GET /me/summary | categories | alerts | health-score | insights`, `POST /me/savings-plan`, `POST /chat`, `POST /me/delete`.
+There is no customer id in any URL or request body.
 Without `ANTHROPIC_API_KEY` the chat uses the offline rule-based client. A full worked transcript is in `docs/chatbot_demo.md`; two examples:
 
 **Where did I spend the most last month?**  
@@ -467,23 +481,22 @@ Without `ANTHROPIC_API_KEY` the chat uses the offline rule-based client. A full 
   with the tool results (and the user's own message). Unverified figures are listed and a visible note is appended. It is a heuristic: it ignores
   counts and dates, accepts x12 annualised figures, and cannot tell a wrong calculation from a right one.
 * **"This month" means the latest month in the data**, reported as `as_of` in every result (the dataset is a simulation ending Dec 2025).
-* **"Usual" spending ignores one-off spikes** but is otherwise a plain mean. I first trimmed the largest month unconditionally, noticed it biased the
-  baseline downward and exaggerated "more than usual", and changed it to drop that month only when it is a clear outlier.
+* **"Usual" spending ignores one-off spikes** but is otherwise a plain mean. An earlier version trimmed the largest month unconditionally, which biased the
+  baseline downward and exaggerated "more than usual"; it now drops that month only when it is a clear outlier.
 * **Fixed or periodic bills are reported separately from habit changes** ("likely a rent revision").
 * Errors never reach the model as stack traces: tool exceptions become a generic message.
 
-## What the tests cover (60 tests in the repo, 59 pass, 1 skipped)
+## What the tests cover
 Service numbers cross-checked against independent pandas calculations; customer scoping; argument validation and injection attempts
 (`customer_id` argument, control characters, over-long strings); a scripted fake model that hallucinates a number, calls a non-existent tool,
 loops forever, or fires six parallel calls; session isolation between customers; and 17 phrasings of the example questions through the offline router.
 
 ## Honest limits
-* **No real LLM was run.** The sandbox has no network and no SDK. The agent loop is tested with scripted models and the offline client, which
+* **No real LLM has been run.** Chat uses the offline rule-based client unless `ANTHROPIC_API_KEY` is set. The agent loop is tested with scripted models and the offline client, which
   verifies the *harness* (protocol, validation, limits, grounding), not how well a real model chooses tools or words answers. `AnthropicClient` is untested.
-* **The FastAPI file was never executed** (FastAPI is not installed in my sandbox); it is compile-checked only, and its behaviour is covered through the
-  handlers. `test_http_layer_with_fastapi_testclient` is skipped here and runs where FastAPI is installed. Expect to fix small wiring issues on first run.
-* **Security is demo-level.** One shared API key; the customer comes from the URL/body, so any key holder can query any customer. A real deployment must
-  derive the customer from an authenticated identity. Sessions are in memory, per process, and there is no rate limiting.
+* **The FastAPI app is covered at two levels:** behaviour through the framework-free handlers, and the routes through HTTP-level tests with `TestClient` (e.g. `tests/test_auth_api.py`).
+* **Security (Phase 9):** the shared API key was replaced by per-user login (signed tokens, server-side web sessions), per-account and per-IP rate limiting stored in PostgreSQL,
+  and optional row-level security. See Phase 9 for what is and is not verified.
 * **Prompt-injection defences are partial** (scoping, validation, sanitising, a system-prompt rule). They reduce risk; they do not eliminate it.
 * The rule-based client understands only the question shapes it was written for; it is a demo and test fixture, not a chatbot.
 * Cost and latency of the real model path were not measured.
@@ -549,11 +562,11 @@ gbm_l1     0.8   -0.169     0.257     0.794     900
 * **The L2 variant is not significantly better than the median.** Squared loss chases the lumpy months (medical bills, trips); the L1 loss is more robust.
 * **Seasonal naive is no better than naive** with only two years of history, since one noisy value from a year ago is a poor forecast.
 * **The 80% interval is well calibrated** on held-out origins (79.4% coverage).
-* **Limits:** simulated data with a seasonality structure I generated (festival and holiday multipliers); one seed; total spend only, not per category;
+* **Limits:** simulated data with a seasonality structure built into the simulator (festival and holiday multipliers); one seed; total spend only, not per category;
   the interval is a pooled relative range, so it does not widen for customers with more volatile spending.
-* **ARIMA, Prophet and LSTM are not in the table.** They were written but never run (libraries unavailable in my sandbox). My *hypothesis*, not a
+* **ARIMA, Prophet and LSTM are not in the table.** They are implemented but have not been run (optional libraries not installed). A *hypothesis*, not a
   result: with 36 monthly points per customer, per-series ARIMA/Prophet will not beat the median or the pooled GBM, and the LSTM will land near the GBM at much higher cost.
-  Run `python -m ml.forecasting.compare --max-series 30 --origins 6` to find out, and report what you get. Note that comparisons are restricted to customers all
+  Running `python -m ml.forecasting.compare --max-series 30 --origins 6` would test it. Note that comparisons are restricted to customers all
   models share, so including the slow per-series models shrinks every row to that subset; run once with `--no-optional` for the full 150-customer table.
 
 
@@ -567,7 +580,7 @@ streamlit run app/streamlit_app.py          # needs the database loaded (see Qui
 
 | File | Purpose |
 |---|---|
-| `streamlit_app.py` | Layout only: sidebar (customer, month) and six tabs |
+| `streamlit_app.py` | Layout only: login screen, sidebar (account, month) and seven tabs |
 | `data_access.py` | Framework-free queries -> clean DataFrames (handles PostgreSQL `Decimal` / `date` types), slider bounds, model-lab file loader |
 | `charts.py` | Plotly figures: spending trend with forecast and range, category donut and stack, weekday and seasonal charts, health gauge and components |
 | `chat.py` | One chat turn: the same agent, tools and grounding check as the API, called in-process |
@@ -575,7 +588,7 @@ streamlit run app/streamlit_app.py          # needs the database loaded (see Qui
 **Tabs:** *Overview* (health score, this month vs usual, next-month forecast with range, alert count, trend chart, category donut, "why did spending change?"),
 *Spending* (12-month category stack, weekday and seasonal patterns, top discretionary merchants, largest transactions), *Health & savings* (score gauge and components,
 interactive savings planner with the plan, per-category cuts and score impact), *Alerts & insights*, *Chat* (sample-question buttons, tools used per answer,
-unverified-figure warnings), and *Model lab* (the backtest, detector and categoriser results from `docs/`, including the confusion matrix).
+unverified-figure warnings), *Import statement* (upload a CSV bank statement), and *Model lab* (the backtest, detector and categoriser results from `docs/`, including the confusion matrix).
 
 **Resilience:** if a table has not been populated yet (alerts, forecasts, health inputs) the matching card shows `n/a` with the reason instead of crashing, and if
 the database is unreachable the app shows the exact commands to start and load it. Both paths are tested.
@@ -590,10 +603,10 @@ the database is unreachable the app shows the exact commands to start and load i
 **How it was verified, and the limits**
 * Data functions, charts and chat run under both SQLite types and PostgreSQL-style types (`Decimal`, `date`). The whole script runs end to end against a recording fake of
   Streamlit and Plotly: 7 charts render, metrics are correct, the chat flow and the sample-question button work, missing tables degrade gracefully, and a dead database
-  shows the help message. Writing these tests found three real bugs before you could (a `Timestamp` passed where a string was required, a misleading metric colour, and a slider
+  shows the help message. Writing these tests found three real bugs early (a `Timestamp` passed where a string was required, a misleading metric colour, and a slider
   default that could fall outside its range for low incomes).
-* **Real Streamlit and Plotly were never run here.** Expect to fix small issues on first launch (a keyword argument that changed in your installed version, a Plotly validation
-  message, layout polish). `tests/test_app.py::test_real_streamlit_app_starts_and_reports_unreachable_database` uses Streamlit's own `AppTest` and runs on your machine.
+* **Real Streamlit and Plotly:** the app has been run in a browser with Streamlit 1.58 and Plotly 6.7, and
+  `tests/test_app.py::test_real_streamlit_app_starts_and_reports_unreachable_database` uses Streamlit's own `AppTest`.
 * **Access:** the app now requires a login (Phase 9). The old customer picker, which listed every customer, was removed.
 * No Power BI dashboard yet; the SQL views (`v_monthly_summary`, `v_category_month_grid`, ...) are the natural source for one.
 
