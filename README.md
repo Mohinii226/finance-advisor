@@ -1,3 +1,7 @@
+# Disclaimer: 
+
+Educational portfolio project. It runs on synthetic data and does not provide financial advice. Merchant and bank names in the simulated data are used only for realism; this project is not affiliated with any of them.
+
 # Intelligent Personal Finance Advisor
 
 An AI + analytics personal-finance assistant on a **synthetic Indian transaction dataset** (realistic merchants, UPI/card descriptions, festivals,
