@@ -12,6 +12,18 @@ EMIs, injected ground-truth events), so every model is evaluated against known t
 > `MAIL_BACKEND=console` in development so verification and reset links are printed in the terminal. An existing database needs
 > `sql/migrations/002_auth_extras.sql`. Details are in *Phase 9* at the end of this file.
 
+## Screenshots
+
+All data shown is synthetic (or a throwaway test account).
+
+| Dashboard overview | Health score and savings planner |
+|---|---|
+| ![Dashboard overview](docs/images/dashboard-overview.png) | ![Health score and savings planner](docs/images/health-score.png) |
+| **"Why did I spend more?" explanation** | **Chat with figures checked against tool results** |
+| ![Spending explanation](docs/images/why-spending-changed.png) | ![Chat](docs/images/chat.png) |
+| **Statement import and privacy controls** | **Login and sign-up** |
+| ![Import statement](docs/images/import-statement.png) | ![Login](docs/images/login.png) ![Create account](docs/images/signup.png) |
+
 ## Quickstart (Ubuntu + Docker + VS Code)
 
 ```bash
